@@ -71,10 +71,11 @@ endfunction")
     (set state.bufnr nil)))
 
 (fn read-chunk [parser-state]
-  (let [paren? (string.match coroutine.yield "(%b())")
-        repl-cmd? (string.match coroutine.yield "^(,)")
+  (let [input (coroutine.yield parser-state.stack-size)
+        paren? (string.match input "(%b())")
+        repl-cmd? (string.match input "^(,)")
         input (if (and (not paren?) (not repl-cmd?))
-                (.. "(sh " (coroutine.yield parser-state.stack-size) ")") (coroutine.yield parser-state.stack-size))]
+                (.. "(sh " input ")") input)]
     (if (not paren?) (set output-sh true))
     (and input (.. input "\n"))))
 

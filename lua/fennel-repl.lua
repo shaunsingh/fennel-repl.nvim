@@ -70,19 +70,20 @@ local function close(bufnr)
   return nil
 end
 local function read_chunk(parser_state)
-  local paren_3f = string.match(coroutine.yield, "(%b())")
-  local repl_cmd_3f = string.match(coroutine.yield, "^(,)")
-  local input
+  local input = coroutine.yield(parser_state["stack-size"])
+  local paren_3f = string.match(input, "(%b())")
+  local repl_cmd_3f = string.match(input, "^(,)")
+  local input0
   if (not paren_3f and not repl_cmd_3f) then
-    input = ("(sh " .. coroutine.yield(parser_state["stack-size"]) .. ")")
+    input0 = ("(sh " .. input .. ")")
   else
-    input = coroutine.yield(parser_state["stack-size"])
+    input0 = input
   end
   if not paren_3f then
     output_sh = true
   else
   end
-  return (input and (input .. "\n"))
+  return (input0 and (input0 .. "\n"))
 end
 local function on_values(vals)
   local vals0
