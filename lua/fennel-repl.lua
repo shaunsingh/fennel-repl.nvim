@@ -1,5 +1,6 @@
 local fennel = require("fennel")
 local state = {n = 1}
+local output_sh = false
 vim.cmd("\nfunction! FennelReplCallback(text)\n    call luaeval('require(\"fennel-repl\").callback(_A[1], _A[2])', [bufnr(), a:text])\nendfunction")
 local function create_buf()
   local bufnr = vim.api.nvim_create_buf(true, true)
@@ -69,25 +70,58 @@ local function close(bufnr)
   return nil
 end
 local function read_chunk(parser_state)
-  local input = coroutine.yield(parser_state["stack-size"])
+  local paren_3f = string.match(coroutine.yield, "(%b())")
+  local repl_cmd_3f = string.match(coroutine.yield, "^(,)")
+  local input
+  if (not paren_3f and not repl_cmd_3f) then
+    input = ("(sh " .. coroutine.yield(parser_state["stack-size"]) .. ")")
+  else
+    input = coroutine.yield(parser_state["stack-size"])
+  end
+  if not paren_3f then
+    output_sh = true
+  else
+  end
   return (input and (input .. "\n"))
 end
 local function on_values(vals)
-  return coroutine.yield(-1, (table.concat(vals, "\9") .. "\n"))
+  local vals0
+  if output_sh then
+    local tbl_15_auto = {}
+    local i_16_auto = #tbl_15_auto
+    for i, v in ipairs(vals) do
+      local val_17_auto = string.gsub(v, "\"", "")
+      if (nil ~= val_17_auto) then
+        i_16_auto = (i_16_auto + 1)
+        do end (tbl_15_auto)[i_16_auto] = val_17_auto
+      else
+      end
+    end
+    vals0 = tbl_15_auto
+  else
+    vals0 = vals
+  end
+  coroutine.yield(-1, (table.concat(vals0, "\9") .. "\n"))
+  if output_sh then
+    output_sh = not output_sh
+    return nil
+  else
+    return nil
+  end
 end
 local function on_error(errtype, err, lua_source)
-  local function _9_()
-    local _8_ = errtype
-    if (_8_ == "Runtime") then
+  local function _14_()
+    local _13_ = errtype
+    if (_13_ == "Runtime") then
       return (fennel.traceback(tostring(err), 4) .. "\n")
     elseif true then
-      local _ = _8_
+      local _ = _13_
       return ("%s error: %s\n"):format(errtype, tostring(err))
     else
       return nil
     end
   end
-  return coroutine.yield(-1, _9_())
+  return coroutine.yield(-1, _14_())
 end
 local function write(bufnr, ...)
   local text = string.gsub(table.concat({...}, " "), "\\n", "\n")
@@ -105,14 +139,14 @@ end
 local function callback(bufnr, text)
   local ok_3f, stack_size, out = coroutine.resume(state.coro, text)
   if (ok_3f and (coroutine.status(state.coro) == "suspended")) then
-    local function _12_()
+    local function _17_()
       if (0 < stack_size) then
         return ".."
       else
         return ">> "
       end
     end
-    vim.fn.prompt_setprompt(bufnr, _12_())
+    vim.fn.prompt_setprompt(bufnr, _17_())
     if (0 > stack_size) then
       write(bufnr, out)
       return coroutine.resume(state.coro)
@@ -137,16 +171,16 @@ local function open(_3fopts)
       env[k] = v
       fenv[k] = v
     end
-    local function _15_(...)
+    local function _20_(...)
       return write(bufnr, ..., "\n")
     end
-    env["print"] = _15_
+    env["print"] = _20_
     fenv["xpcall"] = xpcall_2a
     local repl = setfenv(fennel.repl, fenv)
-    local function _16_()
+    local function _21_()
       return repl({env = env, allowedGlobals = false, pp = fennel.view, readChunk = read_chunk, onValues = on_values, onError = on_error})
     end
-    state.coro = coroutine.create(_16_)
+    state.coro = coroutine.create(_21_)
     coroutine.resume(state.coro)
   else
   end
