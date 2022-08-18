@@ -1,6 +1,22 @@
 (local fennel (require :fennel))
 
+
 (local state {:n 1})
+(var output-sh false)
+
+(macro sh [...]
+  "simple macro to run shell commands inside fennel"
+  `(let [str# 
+         ,(accumulate 
+            [str# ""  _ v# (ipairs [...])]
+            (if 
+              (in-scope? v#) `(.. ,str# " " ,v#)
+              (or (list? v#) (sym? v#)) (.. str# " " (tostring v#))
+              (= (type v#) "string") (.. str# " " (string.format "%q" v#))))
+         fd# (io.popen str#)
+         d# (fd#:read "*a")]
+     (fd#:close)
+     (string.sub d# 1 (- (length d#) 1))))
 
 ; Replace this with a Lua function when Lua funcrefs can be used in callbacks
 ; (see neovim/neovim#14909)
@@ -55,11 +71,21 @@ endfunction")
     (set state.bufnr nil)))
 
 (fn read-chunk [parser-state]
-  (let [input (coroutine.yield parser-state.stack-size)]
+  (let [paren? (string.match coroutine.yield "(%b())")
+        repl-cmd? (string.match coroutine.yield "^(,)")
+        input (if (and (not paren?) (not repl-cmd?))
+                (.. "(sh " (coroutine.yield parser-state.stack-size) ")") (coroutine.yield parser-state.stack-size))]
+    (if (not paren?) (set output-sh true))
     (and input (.. input "\n"))))
 
 (fn on-values [vals]
-  (coroutine.yield -1 (.. (table.concat vals "\t") "\n")))
+  (local vals
+    (if output-sh 
+      ; delete quotes in output (maybe not needed and prone to errors?
+      (icollect [i v (ipairs vals)]
+                (string.gsub v "\"" "")) vals))
+  (coroutine.yield -1 (.. (table.concat vals "\t") "\n"))
+  (if output-sh (set output-sh (not output-sh))))
 
 (fn on-error [errtype err lua-source]
   (coroutine.yield
